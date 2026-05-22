@@ -1,17 +1,20 @@
 import logging
 import os
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 from dotenv import load_dotenv
 
-# Carrega variáveis do .env
-load_dotenv()
+# Tenta carregar variáveis do .env
+load_dotenv(dotenv_path=Path(".env"))
 
-# Lê variáveis de ambiente ou usa valores padrão
+# Usa defeaults se não houver .env
 INPUT_FILE = Path(os.getenv("INPUT_CSV", "data/clientes.csv"))
 OUTPUT_FILE = Path(os.getenv("OUTPUT_CSV", "output/clientes_processados.csv"))
 
+# Carrega chave da OpenAI; se vazia, IA fica desativada
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 
@@ -23,22 +26,76 @@ def extract(input_file: Path) -> pd.DataFrame:
     return df
 
 
-def criar_mensagem(nome: str, cidade: str, produto: str, valor: float) -> str:
+def criar_mensagem_manual(nome: str, cidade: str, produto: str, valor: float) -> str:
     return f"Olá {nome} de {cidade}! Obrigado por comprar {produto} por R${valor:.2f}."
+
+
+# Se quiser, você pode remover o 'typing.Optional' e usar só 'str' depois
+def criar_mensagem_com_ia_openai(
+    nome: str, cidade: str, produto: str, valor: float,
+    model: str = "gpt-3.5-turbo"   # ou "gpt-4o-mini"
+) -> Optional[str]:
+    """
+    Gera mensagem personalizada usando OpenAI.
+    Se a chave não estiver definida, retorna None.
+    """
+    if not OPENAI_API_KEY:
+        return None
+
+    try:
+        import openai
+        from openai import OpenAI
+
+        client = OpenAI(api_key=OPENAI_API_KEY)
+
+        prompt = (
+            f"Você é um assistente de marketing. "
+            f"Escreva uma mensagem de agradecimento em português, bem curta e amigável, para um cliente chamado '{nome}' "
+            f"que mora em '{cidade}', comprou '{produto}' por R${valor:.2f}."
+        )
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "Você é um assistente útil e amigável, que escreve respostas em português bem simples."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=150
+        )
+
+        mensagem = response.choices[0].message.content.strip()
+        logging.info("Mensagem gerada pela IA para %s.", nome)
+        return mensagem
+
+    except Exception as e:
+        logging.warning("Erro ao chamar API OpenAI (usando mensagem manual): %s", str(e))
+        return None
 
 
 def transform(df: pd.DataFrame) -> pd.DataFrame:
     logging.info("ETL: Transformando dados...")
     df_transformado = df.copy()
-    df_transformado["mensagem"] = df_transformado.apply(
-        lambda row: criar_mensagem(
+    df_transformado["mensagem_manual"] = df_transformado.apply(
+        lambda row: criar_mensagem_manual(
             row["nome"],
             row["cidade"],
             row["produto"],
-            row["valor"],
+            row["valor"]
         ),
         axis=1,
     )
+
+    msgs_ia = []
+    for _, row in df_transformado.iterrows():
+        msg_ia = criar_mensagem_com_ia_openai(
+            nome=row["nome"],
+            cidade=row["cidade"],
+            produto=row["produto"],
+            valor=row["valor"]
+        )
+        msgs_ia.append(msg_ia or row["mensagem_manual"])  # usa o manual como fallback
+
+    df_transformado["mensagem"] = msgs_ia
     logging.info("Transformação concluída com sucesso.")
     return df_transformado
 
