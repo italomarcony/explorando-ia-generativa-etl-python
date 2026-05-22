@@ -1,16 +1,19 @@
 import logging
+import os
 from pathlib import Path
 
 import pandas as pd
+from dotenv import load_dotenv
 
-INPUT_FILE = Path("data") / "clientes.csv"
-OUTPUT_DIR = Path("output")
-OUTPUT_FILE = OUTPUT_DIR / "clientes_processados.csv"
+# Carrega variáveis do .env
+load_dotenv()
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s | %(message)s"
-)
+# Lê variáveis de ambiente ou usa valores padrão
+INPUT_FILE = Path(os.getenv("INPUT_CSV", "data/clientes.csv"))
+OUTPUT_FILE = Path(os.getenv("OUTPUT_CSV", "output/clientes_processados.csv"))
+
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
 
 
 def extract(input_file: Path) -> pd.DataFrame:

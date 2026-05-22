@@ -11,4 +11,4 @@ output/*.csv
 # Arquivos de sistema/IDE
 .DS_Store
 Thumbs.db
-.vscode/
+.env
