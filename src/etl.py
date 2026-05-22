@@ -1,16 +1,22 @@
-import pandas as pd
+import logging
 from pathlib import Path
+
+import pandas as pd
 
 INPUT_FILE = Path("data") / "clientes.csv"
 OUTPUT_DIR = Path("output")
 OUTPUT_FILE = OUTPUT_DIR / "clientes_processados.csv"
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s | %(message)s"
+)
+
 
 def extract(input_file: Path) -> pd.DataFrame:
-    print("ETL: Iniciando extração...")
+    logging.info("ETL: Iniciando extração...")
     df = pd.read_csv(input_file)
-    print("Dados originais:")
-    print(df.head())
+    logging.info("Dados extraídos com sucesso: %s linhas.", len(df))
     return df
 
 
@@ -19,7 +25,7 @@ def criar_mensagem(nome: str, cidade: str, produto: str, valor: float) -> str:
 
 
 def transform(df: pd.DataFrame) -> pd.DataFrame:
-    print("\nETL: Transformando dados...")
+    logging.info("ETL: Transformando dados...")
     df_transformado = df.copy()
     df_transformado["mensagem"] = df_transformado.apply(
         lambda row: criar_mensagem(
@@ -30,23 +36,29 @@ def transform(df: pd.DataFrame) -> pd.DataFrame:
         ),
         axis=1,
     )
-    print("Dados transformados (primeiras linhas):")
-    print(df_transformado.head())
+    logging.info("Transformação concluída com sucesso.")
     return df_transformado
 
 
 def load(df: pd.DataFrame, output_file: Path) -> None:
-    print("\nETL: Salvando em CSV...")
+    logging.info("ETL: Salvando arquivo de saída...")
     output_file.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_file, index=False, encoding="utf-8")
-    print("ETL: Concluído!")
-    print(f"Arquivo de saída criado em: {output_file.absolute()}")
+    logging.info("Arquivo salvo com sucesso em: %s", output_file.absolute())
 
 
 def main() -> None:
-    df_extraido = extract(INPUT_FILE)
-    df_transformado = transform(df_extraido)
-    load(df_transformado, OUTPUT_FILE)
+    try:
+        df_extraido = extract(INPUT_FILE)
+        df_transformado = transform(df_extraido)
+        load(df_transformado, OUTPUT_FILE)
+        logging.info("ETL finalizado com sucesso.")
+    except FileNotFoundError:
+        logging.error("Arquivo de entrada não encontrado: %s", INPUT_FILE)
+    except pd.errors.EmptyDataError:
+        logging.error("O arquivo CSV está vazio: %s", INPUT_FILE)
+    except Exception as error:
+        logging.exception("Erro inesperado durante o pipeline: %s", error)
 
 
 if __name__ == "__main__":
